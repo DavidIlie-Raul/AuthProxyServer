@@ -137,9 +137,8 @@ function backupToMongoDB(email, lists, status) {
     }
   });
   sendSuccessFullSignupToWebHook(
-    "Successfull backup of email " +
-      data.email.slice(0, 8) +
-      "..." +
+    "Successful backup of email " +
+      data.email.slice(0, data.email.indexOf("@")) +
       " to mongodb"
   );
 }
