@@ -6,7 +6,7 @@ import bodyParser from "body-parser";
 dotenv.config();
 
 const uri = `mongodb+srv://${process.env.mongouser}:${process.env.mongopass}@mailcluster.xowmhmr.mongodb.net/?retryWrites=true&w=majority`;
-const listmonkURL = "http://127.0.0.1:9000/api/subscribers";
+const listmonkURL = "http://peacefulriches.com:9000/api/subscribers";
 
 let responseToSendBackFromEndpoint;
 const app = express();
@@ -21,6 +21,9 @@ async function connectToMongoDB() {
     console.log("Connected to MongoDB!");
   } catch (error) {
     console.error("Error connecting to MongoDB:", error);
+    sendErrorToWebHook(
+      "Error connecting to MongoDB when Proxy Server started!: " + error
+    );
   }
 }
 
@@ -58,6 +61,7 @@ app.post("/maildata", async (req, res) => {
     };
 
     let responseToSendBackFromEndpoint = await sendDataToListMonk(data);
+    backupToMongoDB(data.email, data.lists, data.status);
     res.send(responseToSendBackFromEndpoint);
   } else {
     res.send({
@@ -114,27 +118,72 @@ async function sendDataToListMonk(data) {
   }
 }
 
-function backupToMongoDB(email) {
+function backupToMongoDB(email, lists, status) {
   const data = {
     email: email,
+    lists: lists,
+    status: status,
   };
   const collection = db.collection("maillist");
 
   collection.insertOne(data, (error, result) => {
     if (error) {
       console.error("Error inserting document:", error);
-      sendErrorToWebHook(
+      return sendErrorToWebHook(
         "Error occured for registering:" + data.email + "  The Error:  " + error
       );
     } else {
       console.log("Document inserted successfully:", result.insertedId);
     }
   });
+  sendSuccessFullSignupToWebHook(
+    "Successfull backup of email " +
+      data.email.slice(0, 8) +
+      "..." +
+      " to mongodb"
+  );
 }
 
-function sendErrorToWebHook(data) {
+async function sendErrorToWebHook(data) {
   const whatToSend = data;
+  const discordWHUrl = process.env.discordWebHookURL;
+
+  try {
+    let response = await axios.post(discordWHUrl, {
+      username: "MongoStatus",
+      avatar_url:
+        "https://www.developer-tech.com/wp-content/uploads/sites/3/2021/02/mongodb-atlas-google-cloud-partnership-nosql-databases-integrations-2.jpg",
+      content: whatToSend,
+    });
+
+    console.log(response);
+    console.log("Error message sent successfully!");
+  } catch (error) {
+    console.log("Could not deliver error message to webhook!", error);
+  }
+
   console.log("Sending mongoDB Error to Webhook" + data);
+}
+
+async function sendSuccessFullSignupToWebHook(data) {
+  const whatToSend = data;
+  const discordWHUrl = process.env.discordWebHookURL;
+
+  try {
+    let response = await axios.post(discordWHUrl, {
+      username: "MongoStatus",
+      avatar_url:
+        "https://www.developer-tech.com/wp-content/uploads/sites/3/2021/02/mongodb-atlas-google-cloud-partnership-nosql-databases-integrations-2.jpg",
+      content: whatToSend,
+    });
+
+    console.log(response);
+    console.log("Error message sent successfully!");
+  } catch (error) {
+    console.log("Could not deliver success message to webhook!", error);
+  }
+
+  console.log("Sending mongoDB Success to Webhook" + data);
 }
 
 function generateRandomId(uniqueFactor) {
