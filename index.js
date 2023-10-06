@@ -61,7 +61,7 @@ app.post("/maildata", async (req, res) => {
     };
 
     let responseToSendBackFromEndpoint = await sendDataToListMonk(data);
-    backupToMongoDB(data.email, data.lists, data.status);
+
     res.send(responseToSendBackFromEndpoint);
   } else {
     res.send({
@@ -96,13 +96,18 @@ async function sendDataToListMonk(data) {
         JSON.stringify(response.data.data) &&
         JSON.stringify(response.data.data.id)
       ) {
+        backupToMongoDB(
+          dataToSendToListMonk.email,
+          dataToSendToListMonk.lists,
+          dataToSendToListMonk.status
+        );
         return { response_message: "User successfully registered" };
       }
     } else {
       console.log(
         "Successfully submitted data to listmonk. Response from ListMonk does not contain data."
       );
-      return { response_message: "User successfully registered" }; // Or handle the case when data is missing
+      return { response_message: "Data is missing from request." }; // Or handle the case when data is missing
     }
   } catch (error) {
     if (error.response && error.response.status === 409) {
