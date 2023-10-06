@@ -1,16 +1,33 @@
 import express, { response } from "express";
+import { MongoClient, ServerApiVersion } from "mongodb";
 import axios from "axios";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
 dotenv.config();
 
+const uri = `mongodb+srv://${process.env.mongouser}:${process.env.mongopass}@mailcluster.xowmhmr.mongodb.net/?retryWrites=true&w=majority`;
 const listmonkURL = "http://127.0.0.1:9000/api/subscribers";
 
 let responseToSendBackFromEndpoint;
 const app = express();
+const client = new MongoClient(uri);
 const PORT = process.env.PORT;
 const emailPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
 app.use(bodyParser.json()); // for parsing application/json
+
+async function connectToMongoDB() {
+  try {
+    await client.connect();
+    console.log("Connected to MongoDB!");
+  } catch (error) {
+    console.error("Error connecting to MongoDB:", error);
+  }
+}
+
+// Call the function to connect
+connectToMongoDB();
+
+const db = client.db("maildb");
 
 //Endpoint to receive ListMonk Data
 app.post("/maildata", async (req, res) => {
@@ -95,6 +112,29 @@ async function sendDataToListMonk(data) {
       return { response_message: "An error occured please try again later" }; // Propagate the error to the caller
     }
   }
+}
+
+function backupToMongoDB(email) {
+  const data = {
+    email: email,
+  };
+  const collection = db.collection("maillist");
+
+  collection.insertOne(data, (error, result) => {
+    if (error) {
+      console.error("Error inserting document:", error);
+      sendErrorToWebHook(
+        "Error occured for registering:" + data.email + "  The Error:  " + error
+      );
+    } else {
+      console.log("Document inserted successfully:", result.insertedId);
+    }
+  });
+}
+
+function sendErrorToWebHook(data) {
+  const whatToSend = data;
+  console.log("Sending mongoDB Error to Webhook" + data);
 }
 
 function generateRandomId(uniqueFactor) {
