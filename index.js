@@ -61,7 +61,7 @@ app.post("/maildata", async (req, res) => {
     };
 
     let responseToSendBackFromEndpoint = await sendDataToListMonk(data);
-    backupToMongoDB(data.email, data.lists, data.status);
+
     res.send(responseToSendBackFromEndpoint);
   } else {
     res.send({
@@ -96,6 +96,7 @@ async function sendDataToListMonk(data) {
         JSON.stringify(response.data.data) &&
         JSON.stringify(response.data.data.id)
       ) {
+        backupToMongoDB(data.email, data.lists, data.status);
         return { response_message: "User successfully registered" };
       }
     } else {
