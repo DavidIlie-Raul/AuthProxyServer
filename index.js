@@ -63,7 +63,8 @@ app.post("/maildata", async (req, res) => {
     res.send(responseToSendBackFromEndpoint);
   } else {
     res.send({
-      response_message: "An Error has occurred, please try again later",
+      response_message:
+        "An Error has occurred, please make sure the email you have provided is valid",
     });
     return console.log(
       "Email or status of new subscriber is missing from request"
@@ -111,7 +112,10 @@ async function sendDataToListMonk(data) {
       return { response_message: "Your Email is already registered" }; // Return the response data
     } else {
       console.error("An error occurred in the axios post towards LM: " + error);
-      return { response_message: "An error occured please try again later" }; // Propagate the error to the caller
+      return {
+        response_message:
+          "An error occured, please make sure you provided a correct email address and try again later.",
+      }; // Propagate the error to the caller
     }
   }
 }
