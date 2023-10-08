@@ -6,7 +6,7 @@ import bodyParser from "body-parser";
 dotenv.config();
 
 const uri = `mongodb+srv://${process.env.mongouser}:${process.env.mongopass}@mailcluster.xowmhmr.mongodb.net/?retryWrites=true&w=majority`;
-const listmonkURL = "http://peacefulriches.com:9000/api/subscribers";
+const listmonkURL = "http://127.0.0.1:9000/api/subscribers";
 
 let responseToSendBackFromEndpoint;
 const app = express();
@@ -38,6 +38,7 @@ app.post("/maildata", async (req, res) => {
     const receivedEmail = req.body.email;
     const receivedStatus = req.body.status;
     const receivedLists = req.body?.lists;
+    const receivedName = req.body?.name;
 
     //compare received email from client to see if it is valid
     console.log("checking if email is valid ...");
@@ -50,14 +51,11 @@ app.post("/maildata", async (req, res) => {
       );
     }
 
-    const randomId = generateRandomId(receivedEmail);
-
     let data = {
       email: receivedEmail,
       status: receivedStatus,
-      name: randomId,
+      name: receivedName,
       lists: receivedLists ? receivedLists : null,
-      preconfirm_subscriptions: true,
     };
 
     let responseToSendBackFromEndpoint = await sendDataToListMonk(data);
@@ -65,8 +63,7 @@ app.post("/maildata", async (req, res) => {
     res.send(responseToSendBackFromEndpoint);
   } else {
     res.send({
-      response_message:
-        "Email or status of new subscriber is missing from request",
+      response_message: "An Error has occurred, please try again later",
     });
     return console.log(
       "Email or status of new subscriber is missing from request"
@@ -96,7 +93,7 @@ async function sendDataToListMonk(data) {
         JSON.stringify(response.data.data) &&
         JSON.stringify(response.data.data.id)
       ) {
-        backupToMongoDB(data.email, data.lists, data.status);
+        backupToMongoDB(data.name, data.email, data.lists, data.status);
         return { response_message: "User successfully registered" };
       }
     } else {
@@ -119,8 +116,9 @@ async function sendDataToListMonk(data) {
   }
 }
 
-function backupToMongoDB(email, lists, status) {
+function backupToMongoDB(name, email, lists, status) {
   const data = {
+    name: name,
     email: email,
     lists: lists,
     status: status,
@@ -184,19 +182,6 @@ async function sendSuccessFullSignupToWebHook(data) {
   }
 
   console.log("Sending mongoDB Success to Webhook" + data);
-}
-
-function generateRandomId(uniqueFactor) {
-  const characters = "0123456789abcdefghijklmnopqrstuvwxyzabcd" + uniqueFactor;
-  const idLength = 8;
-  let randomId = "";
-
-  for (let i = 0; i < idLength; i++) {
-    const randomIndex = Math.floor(Math.random() * characters.length);
-    randomId += characters.charAt(randomIndex);
-  }
-
-  return randomId;
 }
 
 app.listen(PORT);
