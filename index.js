@@ -94,7 +94,7 @@ async function sendDataToListMonk(data) {
         JSON.stringify(response.data.data) &&
         JSON.stringify(response.data.data.id)
       ) {
-        backupToMongoDB(data.name, data.email, data.lists, data.status);
+        await backupToMongoDB(data.name, data.email, data.lists, data.status);
         return { response_message: "User successfully registered" };
       }
     } else {
@@ -128,7 +128,7 @@ async function backupToMongoDB(name, email, lists, status) {
     status: status,
   };
   const collection = db.collection("maillist");
-  const totalSubs = collection.countDocuments();
+  const totalSubs = await collection.estimatedDocumentCount();
 
   collection.insertOne(data, (error, result) => {
     if (error) {
