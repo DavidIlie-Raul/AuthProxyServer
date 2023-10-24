@@ -120,7 +120,7 @@ async function sendDataToListMonk(data) {
   }
 }
 
-function backupToMongoDB(name, email, lists, status) {
+async function backupToMongoDB(name, email, lists, status) {
   const data = {
     name: name,
     email: email,
@@ -128,6 +128,7 @@ function backupToMongoDB(name, email, lists, status) {
     status: status,
   };
   const collection = db.collection("maillist");
+  const totalSubs = collection.countDocuments();
 
   collection.insertOne(data, (error, result) => {
     if (error) {
@@ -142,7 +143,8 @@ function backupToMongoDB(name, email, lists, status) {
   sendSuccessFullSignupToWebHook(
     "Successful backup of email " +
       data.email.slice(0, data.email.indexOf("@")) +
-      " to mongodb"
+      " to mongodb, Total subs as of now: " +
+      totalSubs
   );
 }
 
