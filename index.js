@@ -6,9 +6,10 @@ import bodyParser from "body-parser";
 dotenv.config();
 
 const uri = `mongodb+srv://${process.env.mongouser}:${process.env.mongopass}@mailcluster.xowmhmr.mongodb.net/?retryWrites=true&w=majority`;
-const listmonkURL = "http://127.0.0.1:9000/api/subscribers";
+const mauticBaseURL = "http://mautic.peacefulriches.com/api";
+const mauticContactCreationURL = `${mauticBaseURL}/contacts/new`;
+const mauticEmailCheckURL = `${mauticBaseURL}/contacts`;
 
-let responseToSendBackFromEndpoint;
 const app = express();
 const client = new MongoClient(uri);
 const PORT = process.env.PORT;
@@ -28,18 +29,17 @@ async function connectToMongoDB() {
 }
 
 // Call the function to connect
-connectToMongoDB();
+//connectToMongoDB();
 
 const db = client.db("maildb");
 
-//Endpoint to receive ListMonk Data
+//Endpoint to receive Mautic Data
 app.post("/maildata", async (req, res) => {
-  if (req.body.email && req.body.status) {
-    const receivedEmail = req.body.email;
-    const receivedStatus = req.body.status;
-    const receivedLists = req.body?.lists;
+  if (req.body.email && req.body.name) {
+    const receivedEmail = req.body?.email;
     const receivedName = req.body?.name;
 
+    console.log(receivedEmail, receivedName);
     //compare received email from client to see if it is valid
     console.log("checking if email is valid ...");
     if (emailPattern.test(receivedEmail)) {
@@ -51,83 +51,92 @@ app.post("/maildata", async (req, res) => {
       );
     }
 
+    const spaceIndex = receivedName.indexOf(" ");
+    const lastName =
+      spaceIndex !== -1 ? receivedName.substring(0, spaceIndex) : receivedName;
+    const firstName =
+      spaceIndex !== -1 ? receivedName.substring(spaceIndex + 1) : "";
+
     let data = {
+      firstname: firstName,
+      lastname: lastName,
       email: receivedEmail,
-      status: receivedStatus,
-      name: receivedName,
-      lists: receivedLists ? receivedLists : null,
     };
 
-    let responseToSendBackFromEndpoint = await sendDataToListMonk(data);
+    console.log(data);
+
+    let responseToSendBackFromEndpoint = await sendDataToMautic(data);
 
     res.send(responseToSendBackFromEndpoint);
   } else {
     res.send({
       response_message:
-        "An Error has occurred, please make sure the email you have provided is valid",
+        "An Error has occurred, please make sure the email and name you have provided is valid",
     });
     return console.log(
-      "Email or status of new subscriber is missing from request"
+      "Email or name of new subscriber is missing from request"
     );
   }
 });
 
-async function sendDataToListMonk(data) {
-  console.log("trying to send data to listmonk");
-  const dataToSendToListMonk = data;
+async function sendDataToMautic(data) {
+  console.log("trying to send data to mautic");
+  const dataToSendToMautic = data;
 
-  const lmUser = process.env.lmuser;
-  const lmPass = process.env.lmpass;
+  const mauticUser = process.env.mauticuser;
+  const mauticPass = process.env.mauticpass;
 
   try {
-    const response = await axios.post(listmonkURL, dataToSendToListMonk, {
-      auth: { username: lmUser, password: lmPass },
-    });
+    const response = await axios
+      .post(mauticContactCreationURL, dataToSendToMautic, {
+        auth: { username: mauticUser, password: mauticPass },
+      })
+      .catch((error) => {
+        console.log(error);
+      });
 
     if (response.data) {
-      const stringifiedResponse = JSON.stringify(response.data.data);
-      console.log(
-        "Successfully submitted data to listmonk. Response: " +
-          stringifiedResponse
-      );
-      if (
-        JSON.stringify(response.data.data) &&
-        JSON.stringify(response.data.data.id)
-      ) {
-        await backupToMongoDB(data.name, data.email, data.lists, data.status);
+      console.log("Successfully submitted data to mautic");
+      if (response.data && response.data.contact.id) {
+        await backupToMongoDB(data.name, data.email);
         return { response_message: "User successfully registered" };
       }
     } else {
       console.log(
-        "Successfully submitted data to listmonk. Response from ListMonk does not contain data."
+        "Successfully submitted data to mautic. Response from Mautic does not contain data."
       );
       return { response_message: "User successfully registered" }; // Or handle the case when data is missing
     }
   } catch (error) {
-    if (error.response && error.response.status === 409) {
-      // Handle the conflict scenario where the email already exists
-      console.log(
-        "Response from ListMonk: " + JSON.stringify(error.response.data)
-      );
-      return { response_message: "Your Email is already registered" }; // Return the response data
-    } else {
-      console.error("An error occurred in the axios post towards LM: " + error);
-      return {
-        response_message:
-          "An error occured, please make sure you provided a correct email address and try again later.",
-      }; // Propagate the error to the caller
-    }
+    console.error(
+      "An error occurred in the axios post towards mautic: " + error
+    );
+    return {
+      response_message:
+        "An error occured, please make sure you provided a correct email address and try again later.",
+      // Propagate the error to the caller
+    };
   }
 }
 
-async function backupToMongoDB(name, email, lists, status) {
+async function backupToMongoDB(name, email) {
+  const collection = db.collection("maillist");
+
+  const emailLookupResponse = await collection
+    .find({
+      email: { $regex: `${email}` },
+    })
+    .toArray();
+  console.log(emailLookupResponse);
+
+  if (emailLookupResponse.length > 0) {
+    return console.log("Email already exists");
+  }
+
   const data = {
     name: name,
     email: email,
-    lists: lists,
-    status: status,
   };
-  const collection = db.collection("maillist");
   const totalSubs = await collection.estimatedDocumentCount();
 
   collection.insertOne(data, (error, result) => {
@@ -161,7 +170,7 @@ async function sendErrorToWebHook(data) {
     });
 
     console.log(response);
-    console.log("Error message sent successfully!");
+    console.log("Discord Webhook Error message sent successfully!");
   } catch (error) {
     console.log("Could not deliver error message to webhook!", error);
   }
@@ -181,8 +190,7 @@ async function sendSuccessFullSignupToWebHook(data) {
       content: whatToSend,
     });
 
-    console.log(response);
-    console.log("Error message sent successfully!");
+    console.log("Success message sent successfully!");
   } catch (error) {
     console.log("Could not deliver success message to webhook!", error);
   }
